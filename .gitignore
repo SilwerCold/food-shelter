@@ -1,0 +1,5 @@
+food_shelter-back/__pycache__
+food_shelter-back/.venv
+food_shelter-back/.env
+food-shelter_front/node_modules
+food-shelter_front/recipebox/node_modules
