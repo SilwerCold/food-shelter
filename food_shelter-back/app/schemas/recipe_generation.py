@@ -2,13 +2,11 @@ from pydantic import BaseModel
 from typing import List
 
 
-class GenerationRequest(BaseModel):
-    ingredients: List[str]
-    meal_type: str = "обед"
-    servings: int = 2
+class GenerateRequest(BaseModel):
+    ingredients_ru: List[str]
 
 
-class GenerationResponse(BaseModel):
+class GenerateResponse(BaseModel):
     title: str
     ingredients: List[str]
-    instructions: List[str]
+    directions: List[str]

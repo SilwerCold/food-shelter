@@ -20,11 +20,11 @@ def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=User)
-def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
+def create_user(user_id: UserCreate, db: Session = Depends(get_db)):
     """
     Создать нового пользователя
     """
-    return crud.create_user(db, user_in)
+    return crud.create_user(db, user_id)
 
 
 @router.get("/{user_id}", response_model=User)

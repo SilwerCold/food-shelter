@@ -1,0 +1,13 @@
+uvicorn
+fastapi
+sqlalchemy
+pydantic
+pydantic_settings
+psycopg2-binary
+transformers
+SentencePiece
+torch
+sacremoses
+protobuf
+flax
+jax
