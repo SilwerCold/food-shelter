@@ -1,58 +1,77 @@
 import React from "react";
 import theme from "../theme";
+import { API_URL } from "../config";
 
 // Моковые продукты пользователя для примера
 const MOCK_PRODUCTS = [
-  { id: 1, name: "Milk" },
-  { id: 2, name: "Eggs" },
-  { id: 3, name: "Flour" },
-  { id: 4, name: "Sugar" },
-];
-
-const MEAL_TYPES = [
-  { value: "breakfast", label: "Завтрак" },
-  { value: "lunch", label: "Обед" },
-  { value: "dinner", label: "Ужин" },
-  { value: "snack", label: "Перекус" },
+  { id: 1, name: "Молоко" },
+  { id: 2, name: "Яйца" },
+  { id: 3, name: "Мука" },
+  { id: 4, name: "Сахар" },
 ];
 
 export default function RecipeGenerator() {
-  // В реальном приложении тут будет приходить твой список продуктов
   const [userProducts] = React.useState(MOCK_PRODUCTS);
 
+  // Храним массив выбранных id продуктов
   const [selectedProducts, setSelectedProducts] = React.useState([]);
   const [mealType, setMealType] = React.useState("breakfast");
   const [loading, setLoading] = React.useState(false);
+
+  // recipe теперь ожидает объект вида:
+  // {
+  //   title: string,
+  //   ingredients: string[],
+  //   directions: string[],
+  //   prep_time?: number,
+  //   servings?: number
+  // }
   const [recipe, setRecipe] = React.useState(null);
+  const [error, setError] = React.useState(null);
 
-  // Мок-ответ от генератора
-  const MOCK_RECIPE = {
-    title: "Панкейки",
-    ingredients: [
-      "Молоко — 200 мл",
-      "Яйца — 2 шт.",
-      "Мука — 150 г",
-      "Сахар — 2 ст. л.",
-    ],
-    instructions: [
-      "Смешайте молоко, яйца, муку и сахар.",
-      "Выпекайте на разогретой сковороде до румяной корочки.",
-      "Подавайте с медом или вареньем.",
-    ],
-    prep_time: 25,
-    servings: 3,
-  };
-
-  const handleGenerate = (e) => {
+  const handleGenerate = async (e) => {
     e.preventDefault();
     if (selectedProducts.length === 0) return;
     setLoading(true);
+    setError(null);
 
-    // Тут будет реальный API-запрос к твоему бэку (когда будешь готов)
-    setTimeout(() => {
-      setRecipe(MOCK_RECIPE);
+    // Из выбранных id собираем массив названий
+    const namesRu = selectedProducts.map((id) => {
+      const prod = userProducts.find((p) => p.id === id);
+      return prod ? prod.name : "";
+    });
+
+    try {
+      const response = await fetch(`${API_URL}/recipes/generate/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ingredients_ru: namesRu, meal_type: mealType }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.detail || "Не удалось получить рецепт с сервера"
+        );
+      }
+
+      const data = await response.json();
+      // Ожидаем, что сервер вернул JSON:
+      // { title: string, ingredients: string[], directions: string[], prep_time?: number, servings?: number }
+      setRecipe({
+        title: data.title,
+        ingredients: data.ingredients,
+        directions: data.directions,
+        prep_time: data.prep_time,
+        servings: data.servings,
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   };
 
   return (
@@ -132,7 +151,7 @@ export default function RecipeGenerator() {
               marginBottom: 8,
             }}
           >
-            2. Тип приема пищи:
+            2. Тип приёма пищи:
           </div>
           <select
             value={mealType}
@@ -147,11 +166,10 @@ export default function RecipeGenerator() {
               outline: "none",
             }}
           >
-            {MEAL_TYPES.map((mt) => (
-              <option key={mt.value} value={mt.value}>
-                {mt.label}
-              </option>
-            ))}
+            <option value="breakfast">Завтрак</option>
+            <option value="lunch">Обед</option>
+            <option value="dinner">Ужин</option>
+            <option value="snack">Перекус</option>
           </select>
         </div>
 
@@ -178,6 +196,12 @@ export default function RecipeGenerator() {
         >
           {loading ? "Генерируем..." : "Сгенерировать рецепт"}
         </button>
+
+        {error && (
+          <div style={{ marginTop: 12, color: "red", fontWeight: 500 }}>
+            Ошибка: {error}
+          </div>
+        )}
       </form>
 
       {recipe && (
@@ -248,7 +272,7 @@ export default function RecipeGenerator() {
               👨‍🍳 Инструкция:
             </div>
             <ol style={{ marginTop: 5, marginBottom: 0, paddingLeft: 22 }}>
-              {recipe.instructions.map((step, i) => (
+              {recipe.directions.map((step, i) => (
                 <li
                   key={i}
                   style={{
@@ -263,17 +287,28 @@ export default function RecipeGenerator() {
             </ol>
           </div>
 
-          <div
-            style={{
-              color: theme.accentPurple,
-              fontWeight: 500,
-              fontSize: "1.03rem",
-              marginTop: 10,
-            }}
-          >
-            ⏱️ Время: <b>{recipe.prep_time} мин.</b> &nbsp;|&nbsp; 🍽️ Порций:{" "}
-            <b>{recipe.servings}</b>
-          </div>
+          {/* Эти поля будут показаны, только если они есть в объекте recipe */}
+          {(recipe.prep_time || recipe.servings) && (
+            <div
+              style={{
+                color: theme.accentPurple,
+                fontWeight: 500,
+                fontSize: "1.03rem",
+                marginTop: 10,
+              }}
+            >
+              {recipe.prep_time && (
+                <>
+                  ⏱️ Время: <b>{recipe.prep_time} мин.</b>{" "}
+                </>
+              )}
+              {recipe.servings && (
+                <>
+                  &nbsp;|&nbsp; 🍽️ Порций: <b>{recipe.servings}</b>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

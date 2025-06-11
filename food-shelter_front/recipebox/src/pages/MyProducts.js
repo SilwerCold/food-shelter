@@ -12,6 +12,7 @@ function MyProducts() {
   const [showModal, setShowModal] = React.useState(false);
   const [form, setForm] = React.useState({
     product_id: "",
+    name: "",
     quantity: "",
     unit: "",
     category: "",
@@ -31,26 +32,65 @@ function MyProducts() {
         setAllProducts(allProducts);
         setLoading(false);
       })
-      .catch((err) => {
+      .catch(() => {
         setError("Ошибка загрузки продуктов");
         setLoading(false);
       });
   }, []);
 
-  // Добавление или редактирование продукта
-  const handleAddOrEditProduct = (e) => {
+  // Универсальная очистка формы
+  const resetForm = () =>
+    setForm({
+      product_id: "",
+      name: "",
+      quantity: "",
+      unit: "",
+      category: "",
+      expiry_date: "",
+    });
+
+  // ======= ДОБАВЛЕНИЕ/РЕДАКТИРОВАНИЕ ПРОДУКТА =========
+  const handleAddOrEditProduct = async (e) => {
     e.preventDefault();
-    if (!form.product_id || !form.quantity) return;
+    if (!form.quantity) return;
 
-    const selectedProduct = allProducts.find(
-      (p) => String(p.id) === String(form.product_id)
-    );
-
-    if (!selectedProduct) {
-      setError("Выбран некорректный продукт");
+    // 1. Выясняем product_id и name
+    let usedProduct = null;
+    if (form.product_id) {
+      usedProduct = allProducts.find(
+        (p) => String(p.id) === String(form.product_id)
+      );
+    } else if (form.name.trim()) {
+      // Проверяем — есть ли такой продукт уже (без учёта регистра/пробелов)
+      usedProduct = allProducts.find(
+        (p) => p.name.trim().toLowerCase() === form.name.trim().toLowerCase()
+      );
+      // Если нет — создаём продукт через POST
+      if (!usedProduct) {
+        // Минимально: name, unit, category (можно подставить из формы)
+        const res = await fetch(`${API_URL}/products/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name.trim(),
+            category: form.category || "",
+            unit_type: form.unit || "",
+          }),
+        });
+        usedProduct = await res.json();
+        setAllProducts((prev) => [...prev, usedProduct]);
+      }
+    } else {
+      setError("Выберите продукт или введите название!");
       return;
     }
 
+    if (!usedProduct || !usedProduct.id) {
+      setError("Ошибка выбора/создания продукта");
+      return;
+    }
+
+    // Если мы редактируем продукт — обычный PUT
     if (editProduct) {
       fetch(`${API_URL}/user-products/${USER_ID}/${editProduct.product_id}`, {
         method: "PUT",
@@ -71,21 +111,46 @@ function MyProducts() {
           );
           setShowModal(false);
           setEditProduct(null);
-          setForm({
-            product_id: "",
-            quantity: "",
-            unit: "",
-            category: "",
-            expiry_date: "",
-          });
+          resetForm();
+        });
+      return;
+    }
+
+    // 2. Проверяем, есть ли уже user_product с этим продуктом
+    const exists = products.find(
+      (p) => String(p.product_id) === String(usedProduct.id)
+    );
+
+    if (exists) {
+      // Если есть — делаем PUT, увеличиваем quantity
+      fetch(`${API_URL}/user-products/${USER_ID}/${usedProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: USER_ID,
+          product_id: usedProduct.id,
+          quantity: Number(exists.quantity) + Number(form.quantity),
+          expiry_date: form.expiry_date || exists.expiry_date || null,
+        }),
+      })
+        .then((res) => res.json())
+        .then((updatedProduct) => {
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.product_id === updatedProduct.product_id ? updatedProduct : p
+            )
+          );
+          setShowModal(false);
+          resetForm();
         });
     } else {
+      // Если нет — делаем POST
       fetch(`${API_URL}/user-products/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: USER_ID,
-          product_id: Number(form.product_id),
+          product_id: usedProduct.id,
           quantity: form.quantity,
           expiry_date: form.expiry_date || null,
         }),
@@ -94,18 +159,12 @@ function MyProducts() {
         .then((newProduct) => {
           setProducts((prev) => [...prev, newProduct]);
           setShowModal(false);
-          setForm({
-            product_id: "",
-            quantity: "",
-            unit: "",
-            category: "",
-            expiry_date: "",
-          });
+          resetForm();
         });
     }
   };
 
-  // Удаление продукта
+  // ======= УДАЛЕНИЕ =======
   const handleDeleteProduct = (product_id) => {
     fetch(`${API_URL}/user-products/${USER_ID}/${product_id}`, {
       method: "DELETE",
@@ -114,15 +173,15 @@ function MyProducts() {
     });
   };
 
-  // Подготовка формы для редактирования
+  // ======= РЕДАКТИРОВАНИЕ =======
   const handleEditProduct = (product) => {
-    // Находим продукт в справочнике по product_id для подстановки unit/category (если нужно)
     const selectedProduct =
       allProducts.find((p) => p.id === product.product_id) || {};
 
     setEditProduct(product);
     setForm({
       product_id: product.product_id,
+      name: selectedProduct.name || "",
       quantity: product.quantity,
       unit: selectedProduct.unit_type || product.unit || "",
       category: selectedProduct.category || product.category || "",
@@ -131,7 +190,7 @@ function MyProducts() {
     setShowModal(true);
   };
 
-  // Обновление unit и category при смене продукта
+  // ======= Select продукт — сразу подставить unit/category/name =======
   const handleProductChange = (e) => {
     const newProductId = e.target.value;
     const selectedProduct = allProducts.find(
@@ -140,15 +199,24 @@ function MyProducts() {
     setForm((prev) => ({
       ...prev,
       product_id: newProductId,
+      name: selectedProduct ? selectedProduct.name : "",
       unit: selectedProduct ? selectedProduct.unit_type : "",
       category: selectedProduct ? selectedProduct.category : "",
     }));
   };
 
-  // Фильтрация и сортировка продуктов
+  // ======= Изменение имени вручную — сбрасываем select =======
+  const handleNameInput = (e) => {
+    setForm((prev) => ({
+      ...prev,
+      name: e.target.value,
+      product_id: "",
+    }));
+  };
+
+  // ======= Фильтрация и отображение =======
   const filteredProducts = products
     .filter((product) => {
-      // Ищем по имени (надо найти продукт по id из allProducts)
       const prod = allProducts.find((p) => p.id === product.product_id);
       const name = prod ? prod.name : "";
       return name.toLowerCase().includes(search.toLowerCase());
@@ -158,7 +226,6 @@ function MyProducts() {
       if (!b.expiry_date) return -1;
       return new Date(a.expiry_date) - new Date(b.expiry_date);
     })
-    // Для ProductList прокидываем name/unit/category из справочника:
     .map((product) => {
       const prod = allProducts.find((p) => p.id === product.product_id);
       return {
@@ -200,7 +267,11 @@ function MyProducts() {
             cursor: "pointer",
             boxShadow: "0 2px 6px rgba(0,0,0,0.10)",
           }}
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            resetForm();
+            setEditProduct(null);
+            setShowModal(true);
+          }}
         >
           + Add product
         </button>
@@ -286,18 +357,29 @@ function MyProducts() {
               }}
               value={form.product_id}
               onChange={handleProductChange}
-              required
               disabled={!!editProduct}
             >
-              <option value="" disabled>
-                Select product...
-              </option>
+              <option value="">Select product...</option>
               {allProducts.map((prod) => (
                 <option key={prod.id} value={prod.id}>
                   {prod.name}
                 </option>
               ))}
             </select>
+            <input
+              placeholder="Name (for new product)"
+              style={{
+                padding: "10px",
+                borderRadius: "6px",
+                border: `1.5px solid ${theme.card}`,
+                background: theme.card,
+                color: theme.primaryText,
+              }}
+              value={form.name}
+              onChange={handleNameInput}
+              disabled={!!form.product_id || !!editProduct}
+              required={!form.product_id}
+            />
             <div style={{ display: "flex", gap: "10px" }}>
               <input
                 placeholder="Quantity"
@@ -316,7 +398,7 @@ function MyProducts() {
                 required
               />
               <input
-                placeholder="Unit"
+                placeholder="Unit (for new)"
                 style={{
                   flex: 1,
                   padding: "10px",
@@ -326,12 +408,13 @@ function MyProducts() {
                   color: theme.primaryText,
                 }}
                 value={form.unit}
-                readOnly
+                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                readOnly={!!form.product_id || !!editProduct}
                 tabIndex={-1}
               />
             </div>
             <input
-              placeholder="Category"
+              placeholder="Category (for new)"
               style={{
                 padding: "10px",
                 borderRadius: "6px",
@@ -340,7 +423,8 @@ function MyProducts() {
                 color: theme.primaryText,
               }}
               value={form.category}
-              readOnly
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              readOnly={!!form.product_id || !!editProduct}
               tabIndex={-1}
             />
             <input
@@ -388,13 +472,7 @@ function MyProducts() {
                 }}
                 onClick={() => {
                   setShowModal(false);
-                  setForm({
-                    product_id: "",
-                    quantity: "",
-                    unit: "",
-                    category: "",
-                    expiry_date: "",
-                  });
+                  resetForm();
                   setEditProduct(null);
                 }}
               >
