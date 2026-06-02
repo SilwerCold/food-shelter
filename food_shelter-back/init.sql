@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS recipes (
     meal_type VARCHAR(100),
     prep_time INT,
     servings INT,
+    ingredient_strings JSONB DEFAULT '[]'::jsonb,
+    instructions JSONB DEFAULT '[]'::jsonb,
+    note TEXT DEFAULT '',
+    liked BOOLEAN DEFAULT FALSE,
     is_generated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

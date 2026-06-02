@@ -12,9 +12,9 @@ router = APIRouter(
 
 
 @router.get("/", response_model=List[Recipe])
-def read_recipes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_recipes(skip: int = 0, limit: int = 100, user_id: int | None = None, db: Session = Depends(get_db)):
     """Получить список рецептов"""
-    return crud.get_recipes(db, skip=skip, limit=limit)
+    return crud.get_recipes(db, skip=skip, limit=limit, user_id=user_id)
 
 
 @router.post("/", response_model=Recipe)
