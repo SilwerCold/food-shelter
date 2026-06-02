@@ -1,73 +1,93 @@
 import React from "react";
+import { API_URL, USER_ID } from "../config";
 import theme from "../theme";
-import {motion, AnimatePresence} from "framer-motion";
 
-// Моковые рецепты для примера
-const MOCK_RECIPES = [
-  {
-    id: 1,
-    title: "Панкейки",
-    liked: true,
-    note: "Дети в восторге!",
-    ingredients: [
-      "Молоко — 200 мл",
-      "Яйца — 2 шт.",
-      "Мука — 150 г",
-      "Сахар — 2 ст. л.",
-    ],
-    instructions: [
-      "Смешайте молоко, яйца, муку и сахар.",
-      "Выпекайте на разогретой сковороде до румяной корочки.",
-      "Подавайте с медом или вареньем.",
-    ],
-    prep_time: 25,
-    servings: 3,
-  },
-  {
-    id: 2,
-    title: "Овсяная каша",
-    liked: false,
-    note: "",
-    ingredients: [
-      "Овсяные хлопья — 60 г",
-      "Молоко — 250 мл",
-      "Соль — щепотка",
-      "Сахар — по вкусу",
-    ],
-    instructions: [
-      "Доведите молоко до кипения.",
-      "Добавьте хлопья, соль, сахар.",
-      "Варите 5-7 минут, периодически помешивая.",
-    ],
-    prep_time: 12,
-    servings: 1,
-  },
-];
+function getRecipeIngredients(recipe) {
+  if (recipe.ingredient_strings && recipe.ingredient_strings.length > 0) {
+    return recipe.ingredient_strings;
+  }
+
+  return (recipe.ingredients || []).map(
+    (ingredient) => `Продукт #${ingredient.product_id} — ${ingredient.quantity}`
+  );
+}
 
 export default function SavedRecipes() {
-  const [recipes, setRecipes] = React.useState(MOCK_RECIPES);
+  const [recipes, setRecipes] = React.useState([]);
   const [search, setSearch] = React.useState("");
-
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
   const [editNote, setEditNote] = React.useState({ id: null, text: "" });
 
-  // Поиск по названию
+  React.useEffect(() => {
+    setLoading(true);
+    setError("");
+
+    fetch(`${API_URL}/recipes/?user_id=${USER_ID}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => []);
+        if (!res.ok) {
+          throw new Error(data.detail || "Не удалось загрузить рецепты");
+        }
+        return data;
+      })
+      .then((loadedRecipes) => setRecipes(loadedRecipes))
+      .catch((err) => setError(err.message || "Ошибка загрузки рецептов"))
+      .finally(() => setLoading(false));
+  }, []);
+
   const filteredRecipes = recipes.filter((recipe) =>
     recipe.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Удалить рецепт
-  const handleDelete = (id) => setRecipes(recipes.filter((r) => r.id !== id));
+  const persistRecipe = (recipe) => {
+    fetch(`${API_URL}/recipes/${recipe.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: recipe.user_id,
+        title: recipe.title,
+        meal_type: recipe.meal_type,
+        prep_time: recipe.prep_time,
+        servings: recipe.servings,
+        ingredient_strings: recipe.ingredient_strings || [],
+        instructions: recipe.instructions || [],
+        note: recipe.note || "",
+        liked: Boolean(recipe.liked),
+        is_generated: Boolean(recipe.is_generated),
+        ingredients: recipe.ingredients || [],
+      }),
+    }).catch(() => setError("Не удалось сохранить изменения рецепта"));
+  };
 
-  // Лайк/дизлайк
-  const handleLike = (id) =>
-    setRecipes(
-      recipes.map((r) => (r.id === id ? { ...r, liked: !r.liked } : r))
+  const handleDelete = (id) => {
+    fetch(`${API_URL}/recipes/${id}`, { method: "DELETE" })
+      .then((res) => {
+        if (!res.ok) throw new Error("Не удалось удалить рецепт");
+        setRecipes((current) => current.filter((recipe) => recipe.id !== id));
+      })
+      .catch((err) => setError(err.message || "Ошибка удаления рецепта"));
+  };
+
+  const handleLike = (id) => {
+    setRecipes((current) =>
+      current.map((recipe) => {
+        if (recipe.id !== id) return recipe;
+        const updatedRecipe = { ...recipe, liked: !recipe.liked };
+        persistRecipe(updatedRecipe);
+        return updatedRecipe;
+      })
     );
+  };
 
-  // Сохранить заметку
   const handleSaveNote = (id) => {
-    setRecipes(
-      recipes.map((r) => (r.id === id ? { ...r, note: editNote.text } : r))
+    setRecipes((current) =>
+      current.map((recipe) => {
+        if (recipe.id !== id) return recipe;
+        const updatedRecipe = { ...recipe, note: editNote.text };
+        persistRecipe(updatedRecipe);
+        return updatedRecipe;
+      })
     );
     setEditNote({ id: null, text: "" });
   };
@@ -107,7 +127,34 @@ export default function SavedRecipes() {
         />
       </div>
 
-      {filteredRecipes.length === 0 ? (
+      {error && (
+        <div
+          style={{
+            background: "rgba(208,135,112,0.14)",
+            color: theme.accentOrange,
+            border: `1px solid ${theme.accentOrange}`,
+            borderRadius: "12px",
+            padding: "14px 18px",
+            marginBottom: "20px",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div
+          style={{
+            background: theme.card,
+            borderRadius: "18px",
+            minHeight: "200px",
+            padding: "32px",
+            color: theme.secondaryText,
+          }}
+        >
+          Загружаем рецепты...
+        </div>
+      ) : filteredRecipes.length === 0 ? (
         <div
           style={{
             background: theme.card,
@@ -127,14 +174,11 @@ export default function SavedRecipes() {
             gap: "36px",
           }}
         >
-          <AnimatePresence>
-            {filteredRecipes.map((recipe) => (
-              <motion.div
+          {filteredRecipes.map((recipe) => {
+            const ingredients = getRecipeIngredients(recipe);
+            return (
+              <div
                 key={recipe.id}
-                initial={{ opacity: 0, y: 22 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                transition={{ duration: 0.24 }}
                 style={{
                   background: theme.card,
                   borderRadius: "18px",
@@ -155,9 +199,7 @@ export default function SavedRecipes() {
                     position: "relative",
                   }}
                 >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <h2
                       style={{
                         color: theme.accentGreen,
@@ -170,23 +212,16 @@ export default function SavedRecipes() {
                     <span
                       style={{
                         fontSize: "1.35rem",
-                        color: recipe.liked
-                          ? theme.accentPurple
-                          : theme.secondaryText,
+                        color: recipe.liked ? theme.accentPurple : theme.secondaryText,
                         cursor: "pointer",
                         marginLeft: 8,
                       }}
                       onClick={() => handleLike(recipe.id)}
-                      title={
-                        recipe.liked
-                          ? "Убрать из любимых"
-                          : "Отметить как любимое"
-                      }
+                      title={recipe.liked ? "Убрать из любимых" : "Отметить как любимое"}
                     >
                       {recipe.liked ? "♥" : "♡"}
                     </span>
                   </div>
-                  {/* Кнопка удалить — строго в правом верхнем углу */}
                   <button
                     style={{
                       position: "absolute",
@@ -216,8 +251,8 @@ export default function SavedRecipes() {
                 >
                   <b>Ингредиенты:</b>
                   <ul style={{ margin: 0, paddingLeft: 20 }}>
-                    {recipe.ingredients.map((ing, i) => (
-                      <li key={i}>{ing}</li>
+                    {ingredients.map((ingredient, i) => (
+                      <li key={i}>{ingredient}</li>
                     ))}
                   </ul>
                 </div>
@@ -230,7 +265,7 @@ export default function SavedRecipes() {
                 >
                   <b>Инструкция:</b>
                   <ol style={{ margin: 0, paddingLeft: 20 }}>
-                    {recipe.instructions.map((step, i) => (
+                    {(recipe.instructions || []).map((step, i) => (
                       <li key={i}>{step}</li>
                     ))}
                   </ol>
@@ -242,10 +277,9 @@ export default function SavedRecipes() {
                     marginBottom: 6,
                   }}
                 >
-                  ⏱️ {recipe.prep_time} мин. &nbsp;|&nbsp; 🍽️ {recipe.servings}{" "}
+                  ⏱️ {recipe.prep_time || "—"} мин. &nbsp;|&nbsp; 🍽️ {recipe.servings || "—"}{" "}
                   порций
                 </div>
-                {/* Заметка */}
                 <div
                   style={{
                     background: "rgba(143,188,187,0.09)",
@@ -255,23 +289,23 @@ export default function SavedRecipes() {
                     color: theme.accentGreen,
                   }}
                 >
-                  <b>Заметка:</b>
+                  <b>Заметка:</b>{" "}
                   {editNote.id === recipe.id ? (
-                    <span style={{ display: "flex", alignItems: "center" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <input
                         value={editNote.text}
                         onChange={(e) =>
                           setEditNote({ id: recipe.id, text: e.target.value })
                         }
                         style={{
-                          background: theme.background,
+                          background: theme.sidebar,
                           color: theme.primaryText,
-                          border: `1px solid ${theme.card}`,
+                          border: `1px solid ${theme.accentGreen}`,
                           borderRadius: 6,
-                          marginLeft: 8,
-                          marginRight: 8,
-                          padding: "3px 8px",
+                          padding: "5px 8px",
+                          flex: 1,
                         }}
+                        autoFocus
                       />
                       <button
                         onClick={() => handleSaveNote(recipe.id)}
@@ -280,43 +314,33 @@ export default function SavedRecipes() {
                           color: theme.background,
                           border: "none",
                           borderRadius: 6,
-                          padding: "4px 12px",
+                          padding: "5px 10px",
                           cursor: "pointer",
                         }}
                       >
-                        Сохранить
+                        OK
                       </button>
                     </span>
                   ) : (
-                    <span style={{ marginLeft: 8 }}>
-                      {recipe.note || (
-                        <span style={{ color: theme.secondaryText }}>
-                          Нет заметки
-                        </span>
-                      )}
-                      <button
-                        style={{
-                          marginLeft: 8,
-                          background: "none",
-                          border: "none",
-                          color: theme.accentBlue,
-                          cursor: "pointer",
-                        }}
-                        onClick={() =>
-                          setEditNote({
-                            id: recipe.id,
-                            text: recipe.note || "",
-                          })
-                        }
-                      >
-                        ✏️
-                      </button>
+                    <span
+                      style={{ cursor: "pointer", marginLeft: 8 }}
+                      title="Редактировать заметку"
+                      onClick={() =>
+                        setEditNote({ id: recipe.id, text: recipe.note || "" })
+                      }
+                    >
+                      {recipe.note || "Добавить заметку..."}
                     </span>
                   )}
                 </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                {recipe.is_generated && (
+                  <div style={{ color: theme.accentPurple, fontSize: "0.95rem", marginTop: 8 }}>
+                    ✨ Сгенерировано AI
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

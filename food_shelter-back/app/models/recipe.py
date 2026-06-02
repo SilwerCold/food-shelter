@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
-from app.core.database import Base
 from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import relationship
+
+from app.core.database import Base
 
 
 class Recipe(Base):
@@ -12,6 +14,10 @@ class Recipe(Base):
     meal_type = Column(String, nullable=True)
     prep_time = Column(Integer, nullable=True)
     servings = Column(Integer, nullable=True)
+    ingredient_strings = Column(JSON, default=list)
+    instructions = Column(JSON, default=list)
+    note = Column(String, default="")
+    liked = Column(Boolean, default=False)
     is_generated = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

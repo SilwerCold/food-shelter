@@ -12,6 +12,30 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro,z
+
+  api:
+    build: .
+    container_name: recipebox_api
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-recipebox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-recipeboxpass}
+      POSTGRES_DB: ${POSTGRES_DB:-recipebox}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3-next-80b-a3b-instruct:free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MAX_TOKENS: ${OPENROUTER_MAX_TOKENS:-900}
+      OPENROUTER_TEMPERATURE: ${OPENROUTER_TEMPERATURE:-0.7}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-30}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://localhost:3000}
+      OPENROUTER_APP_NAME: ${OPENROUTER_APP_NAME:-RecipeBox}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
 volumes:
   db_data:
 

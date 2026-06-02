@@ -1,7 +1,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from app.core.config import settings
-from app.routers import product, user_product, shopping_list, shopping_list_item, recipe, recipe_ingredient, user#, recipe_generation
+from app.routers import product, user_product, shopping_list, shopping_list_item, recipe, recipe_ingredient, user, recipe_generation
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -29,8 +29,8 @@ app.include_router(shopping_list_item.router,
 app.include_router(recipe.router, prefix="/recipes", tags=["recipes"])
 app.include_router(recipe_ingredient.router,
                    prefix="/recipe-ingredients", tags=["recipe-ingredients"])
-#app.include_router(recipe_generation.router,
-#                   prefix="/recipes/generate", tags=["recipe-generation"])
+app.include_router(recipe_generation.router,
+                   prefix="/recipes/generate", tags=["recipe-generation"])
 
 @app.get("/")
 async def read_root():
